@@ -14,6 +14,9 @@ import java.util.Map;
 
 /**
  * Centralized exception handler for REST API error responses.
+ *
+ * @author Raneesh Sasankan
+ * @since 1.0
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {

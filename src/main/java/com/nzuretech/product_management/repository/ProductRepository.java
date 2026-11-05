@@ -10,6 +10,9 @@ import java.util.List;
  *
  * <p>Provides standard CRUD operations and custom derived queries
  * for product name searches and category filtering.</p>
+ *
+ * @author Raneesh Sasankan
+ * @since 1.0
  */
 public interface ProductRepository extends JpaRepository<Product, Long> {
 

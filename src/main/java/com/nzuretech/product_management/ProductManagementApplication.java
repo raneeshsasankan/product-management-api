@@ -8,6 +8,9 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  *
  * <p>Bootstraps the Spring application context, auto-configuration,
  * and embedded servlet container.</p>
+ *
+ * @author Raneesh Sasankan
+ * @since 1.0
  */
 @SpringBootApplication
 public class ProductManagementApplication {

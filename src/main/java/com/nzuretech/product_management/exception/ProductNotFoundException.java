@@ -2,6 +2,9 @@ package com.nzuretech.product_management.exception;
 
 /**
  * Exception thrown when a requested product cannot be found.
+ *
+ * @author Raneesh Sasankan
+ * @since 1.0
  */
 public class ProductNotFoundException extends RuntimeException {
 

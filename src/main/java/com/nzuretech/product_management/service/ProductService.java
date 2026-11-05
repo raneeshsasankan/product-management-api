@@ -8,6 +8,9 @@ import java.util.List;
 
 /**
  * Defines business operations for managing products.
+ *
+ * @author Raneesh Sasankan
+ * @since 1.0
  */
 public interface ProductService {
 

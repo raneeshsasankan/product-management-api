@@ -16,6 +16,9 @@ import java.util.List;
  *
  * <p>Handles business logic, entity-to-DTO mapping, and transaction
  * boundaries for product catalog operations.</p>
+ *
+ * @author Raneesh Sasankan
+ * @since 1.0
  */
 @Service
 @Transactional
@@ -71,7 +74,9 @@ public class ProductServiceImpl implements ProductService {
 
         mapRequestToEntity(request, product);
 
-        // Hibernate dirty checking persists changes at transaction commit.
+        // Flush changes to trigger the @PreUpdate lifecycle callback.
+        productRepository.saveAndFlush(product);
+
         return mapEntityToResponse(product);
     }
 

@@ -9,6 +9,9 @@ import java.time.LocalDateTime;
  *
  * <p>Maintains product information, inventory details, and
  * creation and modification timestamps.</p>
+ *
+ * @author Raneesh Sasankan
+ * @since 1.0
  */
 @Entity
 @Table(name = "products")
