@@ -12,6 +12,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import jakarta.validation.Valid;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -25,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * REST controller for managing product resources.
@@ -42,6 +47,20 @@ import java.util.List;
 public class ProductController {
 
     private final ProductService productService;
+
+    /**
+     * Defines the product fields allowed for sorting.
+     */
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
+            "id",
+            "name",
+            "description",
+            "price",
+            "quantity",
+            "category",
+            "createdAt",
+            "updatedAt"
+    );
 
     /**
      * Constructs the controller with its service dependency.
@@ -80,23 +99,49 @@ public class ProductController {
     }
 
     /**
-     * Retrieves all products.
+     * Retrieves products using pagination and sorting.
      *
-     * @return all products with HTTP 200 status
+     * @param page the zero-based page number
+     * @param size the number of products per page
+     * @param sortBy the product field used for sorting
+     * @param direction the sorting direction (asc or desc)
+     * @return a page containing products and pagination metadata
+     * @throws IllegalArgumentException if pagination or sorting parameters are invalid
      */
     @Operation(
-            summary = "Get all products",
-            description = "Retrieves a list of all products."
+            summary = "Get all products with pagination and sorting",
+            description = "Retrieves all products with support for pagination and sorting."
     )
-    @ApiResponses({
+    @ApiResponses(value = {
             @ApiResponse(responseCode = "200",
                     description = "Products retrieved successfully"),
+            @ApiResponse(responseCode = "400",
+                    description = "Invalid pagination or sorting parameters"),
             @ApiResponse(responseCode = "500",
-                    description = "Unexpected server error")
+                    description = "Internal server error")
     })
     @GetMapping
-    public ResponseEntity<List<ProductResponse>> getAllProducts() {
-        return ResponseEntity.ok(productService.getAllProducts());
+    public ResponseEntity<Page<ProductResponse>> getAllProducts(
+
+            @Parameter(description = "Zero-based page number",
+                    example = "0")
+            @RequestParam(defaultValue = "0") int page,
+
+            @Parameter(description = "Number of products per page (1-100)",
+                    example = "10")
+            @RequestParam(defaultValue = "10") int size,
+
+            @Parameter(description = "Product field used for sorting",
+                    example = "name")
+            @RequestParam(defaultValue = "name") String sortBy,
+
+            @Parameter(description = "Sorting direction: asc or desc",
+                    example = "asc")
+            @RequestParam(defaultValue = "asc") String direction) {
+
+        Pageable pageable = createPageable(page, size, sortBy, direction);
+
+        return ResponseEntity.ok(productService.getAllProducts(pageable));
     }
 
     /**
@@ -185,53 +230,136 @@ public class ProductController {
     }
 
     /**
-     * Searches products by name.
+     * Searches for products by name using pagination and sorting.
      *
      * @param name the search keyword
-     * @return matching products with HTTP 200 status
+     * @param page the zero-based page number
+     * @param size the number of products per page
+     * @param sortBy the product field used for sorting
+     * @param direction the sorting direction (asc or desc)
+     * @return a page containing matching products with HTTP 200 status
      */
     @Operation(
-            summary = "Search products by name",
-            description = "Finds products whose names contain the supplied search keyword."
+            summary = "Search products by name with pagination and sorting",
+            description = "Finds products whose names contain the supplied search keyword. "
+                    + "Supports pagination and sorting."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200",
                     description = "Search completed successfully"),
+            @ApiResponse(responseCode = "400",
+                    description = "Invalid pagination or sorting parameters"),
             @ApiResponse(responseCode = "500",
                     description = "Unexpected server error")
     })
     @GetMapping("/search")
-    public ResponseEntity<List<ProductResponse>> searchProducts(
+    public ResponseEntity<Page<ProductResponse>> searchProducts(
             @Parameter(description = "Product name or partial name to search for",
                     example = "Samsung")
-            @RequestParam(name = "name") String name) {
+            @RequestParam(name = "name") String name,
 
-        return ResponseEntity.ok(productService.searchProducts(name));
+            @Parameter(description = "Zero-based page number",
+                    example = "0")
+            @RequestParam(defaultValue = "0") int page,
+
+            @Parameter(description = "Number of products per page (1-100)",
+                    example = "10")
+            @RequestParam(defaultValue = "10") int size,
+
+            @Parameter(description = "Product field used for sorting",
+                    example = "name")
+            @RequestParam(defaultValue = "name") String sortBy,
+
+            @Parameter(description = "Sorting direction: asc or desc",
+                    example = "asc")
+            @RequestParam(defaultValue = "asc") String direction) {
+
+        Pageable pageable = createPageable(page, size, sortBy, direction);
+
+        return ResponseEntity.ok(productService.searchProducts(name, pageable));
     }
 
     /**
-     * Retrieves products by category.
+     * Retrieves products belonging to a category using pagination and sorting.
      *
      * @param category the category name
-     * @return matching products with HTTP 200 status
+     * @param page the zero-based page number
+     * @param size the number of products per page
+     * @param sortBy the product field used for sorting
+     * @param direction the sorting direction (asc or desc)
+     * @return a page containing matching products with HTTP 200 status
      */
     @Operation(
-            summary = "Get products by category",
-            description = "Retrieves all products belonging to the specified category."
+            summary = "Get products by category with pagination and sorting",
+            description = "Retrieves products belonging to the specified category. "
+                    + "Supports pagination and sorting."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200",
                     description = "Products retrieved successfully"),
+            @ApiResponse(responseCode = "400",
+                    description = "Invalid pagination or sorting parameters"),
             @ApiResponse(responseCode = "500",
                     description = "Unexpected server error")
     })
     @GetMapping("/category/{category}")
-    public ResponseEntity<List<ProductResponse>> getProductsByCategory(
+    public ResponseEntity<Page<ProductResponse>> getProductsByCategory(
             @Parameter(description = "Product category to filter by",
                     example = "Electronics")
-            @PathVariable("category") String category) {
+            @PathVariable("category") String category,
+
+            @Parameter(description = "Zero-based page number",
+                    example = "0")
+            @RequestParam(defaultValue = "0") int page,
+
+            @Parameter(description = "Number of products per page (1-100)",
+                    example = "10")
+            @RequestParam(defaultValue = "10") int size,
+
+            @Parameter(description = "Product field used for sorting",
+                    example = "name")
+            @RequestParam(defaultValue = "name") String sortBy,
+
+            @Parameter(description = "Sorting direction: asc or desc",
+                    example = "asc")
+            @RequestParam(defaultValue = "asc") String direction) {
+
+        Pageable pageable = createPageable(page, size, sortBy, direction);
 
         return ResponseEntity.ok(
-                productService.getProductsByCategory(category));
+                productService.getProductsByCategory(category, pageable));
+    }
+
+    /**
+     * Creates pagination and sorting information after validating the parameters.
+     *
+     * @param page the zero-based page number
+     * @param size the number of products per page
+     * @param sortBy the product field used for sorting
+     * @param direction the sorting direction (asc or desc)
+     * @return the validated pagination and sorting information
+     * @throws IllegalArgumentException if any pagination or sorting parameter is invalid
+     */
+    private Pageable createPageable(int page, int size, String sortBy, String direction) {
+
+        if (page < 0) {
+            throw new IllegalArgumentException("Page number cannot be negative.");
+        }
+
+        if (size < 1 || size > 100) {
+            throw new IllegalArgumentException("Page size must be between 1 and 100.");
+        }
+
+        if (!ALLOWED_SORT_FIELDS.contains(sortBy)) {
+            throw new IllegalArgumentException("Invalid sort field: " + sortBy);
+        }
+
+        if (!"asc".equalsIgnoreCase(direction) && !"desc".equalsIgnoreCase(direction)) {
+            throw new IllegalArgumentException("Invalid sort direction: " + direction);
+        }
+
+        Sort.Direction sortDirection = Sort.Direction.fromString(direction);
+
+        return PageRequest.of(page, size, Sort.by(sortDirection, sortBy));
     }
 }

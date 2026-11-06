@@ -21,7 +21,8 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private static final Logger logger =
+            LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     /**
      * Handles product not found exceptions.
@@ -65,6 +66,22 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Handles invalid request parameters and arguments.
+     *
+     * @param ex the caught exception
+     * @return a 400 Bad Request response
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalArgument(
+            IllegalArgumentException ex) {
+
+        Map<String, Object> response = createErrorResponse(
+                HttpStatus.BAD_REQUEST, ex.getMessage());
+
+        return ResponseEntity.badRequest().body(response);
+    }
+
+    /**
      * Handles unexpected application exceptions.
      *
      * @param ex the unexpected exception
@@ -75,6 +92,7 @@ public class GlobalExceptionHandler {
             Exception ex) {
 
         logger.error("Unexpected error occurred while processing request", ex);
+
         Map<String, Object> response = createErrorResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "An unexpected error occurred.");

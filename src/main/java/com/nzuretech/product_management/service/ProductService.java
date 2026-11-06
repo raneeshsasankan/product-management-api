@@ -3,6 +3,8 @@ package com.nzuretech.product_management.service;
 import com.nzuretech.product_management.dto.ProductRequest;
 import com.nzuretech.product_management.dto.ProductResponse;
 import com.nzuretech.product_management.exception.ProductNotFoundException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
@@ -23,11 +25,12 @@ public interface ProductService {
     ProductResponse createProduct(ProductRequest request);
 
     /**
-     * Retrieves all products.
+     * Retrieves products using pagination and sorting.
      *
-     * @return a list of products
+     * @param pageable the pagination and sorting information
+     * @return a page containing products and pagination metadata
      */
-    List<ProductResponse> getAllProducts();
+    Page<ProductResponse> getAllProducts(Pageable pageable);
 
     /**
      * Retrieves a product by its unique identifier.
@@ -57,18 +60,21 @@ public interface ProductService {
     void deleteProduct(Long id);
 
     /**
-     * Searches products by name using case-insensitive substring matching.
+     * Searches for products by name using pagination and sorting.
      *
-     * @param name the search keyword
-     * @return a list of matching products
+     * @param name the search text
+     * @param pageable the pagination and sorting information
+     * @return a page containing matching products
      */
-    List<ProductResponse> searchProducts(String name);
+    Page<ProductResponse> searchProducts(String name, Pageable pageable);
 
     /**
-     * Retrieves products belonging to a specified category.
+     * Retrieves products belonging to the specified category
+     * using pagination and sorting.
      *
      * @param category the category name
-     * @return a list of matching products
+     * @param pageable the pagination and sorting information
+     * @return a page containing matching products
      */
-    List<ProductResponse> getProductsByCategory(String category);
+    Page<ProductResponse> getProductsByCategory(String category, Pageable pageable);
 }

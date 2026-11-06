@@ -6,6 +6,8 @@ import com.nzuretech.product_management.entity.Product;
 import com.nzuretech.product_management.exception.ProductNotFoundException;
 import com.nzuretech.product_management.repository.ProductRepository;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,11 +49,9 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<ProductResponse> getAllProducts() {
-        return productRepository.findAll()
-                .stream()
-                .map(this::mapEntityToResponse)
-                .toList();
+    public Page<ProductResponse> getAllProducts(Pageable pageable) {
+        return productRepository.findAll(pageable)
+                .map(this::mapEntityToResponse);
     }
 
     @Override
@@ -92,20 +92,16 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<ProductResponse> searchProducts(String name) {
-        return productRepository.findByNameContainingIgnoreCase(name)
-                .stream()
-                .map(this::mapEntityToResponse)
-                .toList();
+    public Page<ProductResponse> searchProducts(String name, Pageable pageable) {
+        return productRepository.findByNameContainingIgnoreCase(name, pageable)
+                .map(this::mapEntityToResponse);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<ProductResponse> getProductsByCategory(String category) {
-        return productRepository.findByCategoryIgnoreCase(category)
-                .stream()
-                .map(this::mapEntityToResponse)
-                .toList();
+    public Page<ProductResponse> getProductsByCategory(String category, Pageable pageable) {
+        return productRepository.findByCategoryIgnoreCase(category, pageable)
+                .map(this::mapEntityToResponse);
     }
 
     /**
