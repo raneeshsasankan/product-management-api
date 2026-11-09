@@ -522,7 +522,7 @@ class ProductServiceImplTest {
      * @param category the product category
      * @return a product populated with the specified test values
      */
-    private Product createTestProduct(
+    private static Product createTestProduct(
             Long id,
             String name,
             String description,
