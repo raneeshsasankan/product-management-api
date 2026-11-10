@@ -123,4 +123,21 @@ public class GlobalExceptionHandler {
 
         return response;
     }
+
+    /**
+     * Handles duplicate product exceptions.
+     *
+     * @param ex the caught exception
+     * @return a 409 Conflict response
+     */
+    @ExceptionHandler(DuplicateProductException.class)
+    public ResponseEntity<Map<String, Object>> handleDuplicateProduct(
+            DuplicateProductException ex) {
+
+        Map<String, Object> response = createErrorResponse(
+                HttpStatus.CONFLICT, ex.getMessage());
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+    }
+
 }

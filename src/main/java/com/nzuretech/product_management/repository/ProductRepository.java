@@ -4,6 +4,8 @@ import com.nzuretech.product_management.entity.Product;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 
 /**
@@ -36,4 +38,20 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
      * @return a page containing matching products
      */
     Page<Product> findByCategoryIgnoreCase(String category, Pageable pageable);
+
+
+    /**
+     * Checks whether a product exists with the specified name,
+     * ignoring case differences and surrounding whitespace.
+     *
+     * @param name the product name to check
+     * @return true if a matching product exists, otherwise false
+     */
+    @Query("""
+       SELECT CASE WHEN COUNT(p) > 0 THEN true ELSE false END
+       FROM Product p
+       WHERE LOWER(TRIM(p.name)) = LOWER(TRIM(:name))
+       """)
+    boolean existsByNormalizedName(@Param("name") String name);
+
 }

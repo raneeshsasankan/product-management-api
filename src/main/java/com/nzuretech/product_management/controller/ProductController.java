@@ -86,6 +86,8 @@ public class ProductController {
                     description = "Product created successfully"),
             @ApiResponse(responseCode = "400",
                     description = "Invalid product details or validation failure"),
+            @ApiResponse(responseCode = "409",
+                    description = "A product with the specified name already exists"),
             @ApiResponse(responseCode = "500",
                     description = "Unexpected server error")
     })
@@ -188,6 +190,8 @@ public class ProductController {
                     description = "Invalid product details or validation failure"),
             @ApiResponse(responseCode = "404",
                     description = "Product not found"),
+            @ApiResponse(responseCode = "409",
+                    description = "Another product already uses the specified name"),
             @ApiResponse(responseCode = "500",
                     description = "Unexpected server error")
     })

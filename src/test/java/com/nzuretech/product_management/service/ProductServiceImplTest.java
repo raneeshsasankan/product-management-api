@@ -2,15 +2,18 @@ package com.nzuretech.product_management.service;
 
 import com.nzuretech.product_management.dto.ProductRequest;
 import com.nzuretech.product_management.entity.Product;
+import com.nzuretech.product_management.exception.DuplicateProductException;
 import com.nzuretech.product_management.exception.ProductNotFoundException;
 import com.nzuretech.product_management.repository.ProductRepository;
 import com.nzuretech.product_management.dto.ProductResponse;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -18,6 +21,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
 
@@ -179,13 +183,9 @@ class ProductServiceImplTest {
     @Test
     void createProduct_whenValidRequest_returnsCreatedProductResponse() {
 
-        // Arrange
-        ProductRequest request = new ProductRequest();
-        request.setName("Apple MacBook Pro");
-        request.setDescription("Apple laptop");
-        request.setPrice(new BigDecimal("2499.99"));
-        request.setQuantity(10);
-        request.setCategory("Electronics");
+        ProductRequest request = createTestProductRequest("Apple MacBook Pro",
+                "Apple laptop", new BigDecimal("2499.99"), 10,
+                "Electronics");
 
         Product savedProduct = createTestProduct(
                 2L,
@@ -196,7 +196,7 @@ class ProductServiceImplTest {
                 "Electronics"
         );
 
-        when(productRepository.save(any(Product.class)))
+        when(productRepository.saveAndFlush(any(Product.class)))
                 .thenReturn(savedProduct);
 
         ProductResponse response = productService.createProduct(request);
@@ -212,7 +212,7 @@ class ProductServiceImplTest {
         ArgumentCaptor<Product> productCaptor =
                 ArgumentCaptor.forClass(Product.class);
 
-        verify(productRepository).save(productCaptor.capture());
+        verify(productRepository).saveAndFlush(productCaptor.capture());
 
         Product capturedProduct = productCaptor.getValue();
 
@@ -221,6 +221,128 @@ class ProductServiceImplTest {
         assertEquals(new BigDecimal("2499.99"), capturedProduct.getPrice());
         assertEquals(10, capturedProduct.getQuantity());
         assertEquals("Electronics", capturedProduct.getCategory());
+    }
+
+    /**
+     * Verifies that creating a product with an existing name
+     * throws DuplicateProductException and does not save the product.
+     */
+    @Test
+    void createProduct_ShouldThrowException_WhenNameAlreadyExists() {
+
+        ProductRequest request = createTestProductRequest("Samsung Galaxy S26",
+                "Samsung smartphone", new BigDecimal("999.99"), 25,
+                "Electronics");
+
+        when(productRepository.existsByNormalizedName(request.getName()))
+                .thenReturn(true);
+
+        DuplicateProductException exception = assertThrows(
+                DuplicateProductException.class,
+                () -> productService.createProduct(request)
+        );
+
+        assertEquals(
+                "Product already exists with name: Samsung Galaxy S26",
+                exception.getMessage()
+        );
+
+        verify(productRepository)
+                .existsByNormalizedName("Samsung Galaxy S26");
+
+        verify(productRepository, never()).saveAndFlush(any(Product.class));
+    }
+
+    /**
+     * Verifies that a database violation of the product-name
+     * unique index is translated into DuplicateProductException.
+     */
+    @Test
+    void createProduct_whenUniqueIndexIsViolated_throwsDuplicateProductException() {
+
+        ProductRequest request = createTestProductRequest("Samsung Galaxy S26",
+                "Samsung smartphone", new BigDecimal("999.99"), 25,
+                "Electronics");
+
+        SQLException sqlException = new SQLException(
+                "Duplicate product name",
+                "23505"
+        );
+
+        ConstraintViolationException constraintException =
+                new ConstraintViolationException(
+                        "Unique index violation",
+                        sqlException,
+                        "ux_products_normalized_name"
+                );
+
+        DataIntegrityViolationException dataException =
+                new DataIntegrityViolationException(
+                        "Database integrity violation",
+                        constraintException
+                );
+
+        when(productRepository.saveAndFlush(any(Product.class)))
+                .thenThrow(dataException);
+
+        DuplicateProductException exception = assertThrows(
+                DuplicateProductException.class,
+                () -> productService.createProduct(request)
+        );
+
+        assertEquals(
+                "Product already exists with name: Samsung Galaxy S26",
+                exception.getMessage()
+        );
+
+        verify(productRepository).existsByNormalizedName(request.getName());
+        verify(productRepository).saveAndFlush(any(Product.class));
+    }
+
+    /**
+     * Verifies that a database integrity violation unrelated to
+     * the product-name unique index is propagated unchanged.
+     */
+    @Test
+    void createProduct_whenUnrelatedConstraintIsViolated_propagatesException() {
+
+        ProductRequest request = createTestProductRequest("Samsung Galaxy S26",
+                "Samsung smartphone", new BigDecimal("999.99"), 25,
+                "Electronics");
+
+        SQLException sqlException = new SQLException(
+                "Other database constraint violation",
+                "23502"
+        );
+
+        ConstraintViolationException constraintException =
+                new ConstraintViolationException(
+                        "Not-null constraint violation",
+                        sqlException,
+                        "products_category_not_null"
+                );
+
+        DataIntegrityViolationException dataException =
+                new DataIntegrityViolationException(
+                        "Database integrity violation",
+                        constraintException
+                );
+
+        when(productRepository.saveAndFlush(any(Product.class)))
+                .thenThrow(dataException);
+
+        DataIntegrityViolationException exception = assertThrows(
+                DataIntegrityViolationException.class,
+                () -> productService.createProduct(request)
+        );
+
+        assertSame(dataException, exception);
+
+        verify(productRepository)
+                .existsByNormalizedName(request.getName());
+
+        verify(productRepository)
+                .saveAndFlush(any(Product.class));
     }
 
     /**
@@ -241,16 +363,14 @@ class ProductServiceImplTest {
                 "Electronics"
         );
 
-        ProductRequest request = new ProductRequest();
-        request.setName("Samsung Galaxy S26 Ultra");
-        request.setDescription("Updated Samsung flagship smartphone");
-        request.setPrice(new BigDecimal("1299.99"));
-        request.setQuantity(15);
-        request.setCategory("Electronics");
+        ProductRequest request = createTestProductRequest("Samsung Galaxy S26 Ultra",
+                "Updated Samsung flagship smartphone", new BigDecimal("1299.99"),
+                15, "Electronics");
 
         when(productRepository.findById(productId))
                 .thenReturn(Optional.of(product));
-
+        when(productRepository.existsByNormalizedName(request.getName()))
+                .thenReturn(false);
         when(productRepository.saveAndFlush(any(Product.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -265,7 +385,106 @@ class ProductServiceImplTest {
         assertEquals("Electronics", response.getCategory());
 
         verify(productRepository).findById(productId);
+        verify(productRepository)
+                .existsByNormalizedName("Samsung Galaxy S26 Ultra");
         verify(productRepository).saveAndFlush(any(Product.class));
+    }
+
+    /**
+     * Verifies that updating a product with a name already used
+     * by another product throws DuplicateProductException
+     * and does not save the changes.
+     */
+    @Test
+    void updateProduct_whenNameAlreadyExists_throwsDuplicateProductException() {
+
+        Long productId = 2L;
+
+        Product existingProduct = createTestProduct(
+                productId,
+                "Apple iPhone 17",
+                "Apple smartphone",
+                new BigDecimal("1099.99"),
+                20,
+                "Electronics"
+        );
+
+        ProductRequest request = createTestProductRequest("Samsung Galaxy S26",
+                "Samsung smartphone", new BigDecimal("999.99"), 25,
+                "Electronics");
+
+        when(productRepository.findById(productId))
+                .thenReturn(Optional.of(existingProduct));
+
+        when(productRepository.existsByNormalizedName(request.getName()))
+                .thenReturn(true);
+
+        DuplicateProductException exception = assertThrows(
+                DuplicateProductException.class,
+                () -> productService.updateProduct(productId, request)
+        );
+
+        assertEquals(
+                "Product already exists with name: Samsung Galaxy S26",
+                exception.getMessage()
+        );
+
+        verify(productRepository).findById(productId);
+
+        verify(productRepository)
+                .existsByNormalizedName("Samsung Galaxy S26");
+
+        verify(productRepository, never())
+                .saveAndFlush(any(Product.class));
+
+        assertEquals("Apple iPhone 17", existingProduct.getName());
+    }
+
+    /**
+     * Verifies that updating a product without changing its name
+     * succeeds without performing a duplicate-name lookup.
+     */
+    @Test
+    void updateProduct_whenNameIsUnchanged_returnsUpdatedProductResponse() {
+
+        Long productId = 2L;
+
+        Product product = createTestProduct(
+                productId,
+                "Samsung Galaxy S26",
+                "Samsung smartphone",
+                new BigDecimal("999.99"),
+                10,
+                "Electronics"
+        );
+
+        ProductRequest request = createTestProductRequest("Samsung Galaxy S26",
+                "Updated Samsung smartphone", new BigDecimal("1199.99"),
+                20, "Electronics");
+
+        when(productRepository.findById(productId))
+                .thenReturn(Optional.of(product));
+
+        when(productRepository.saveAndFlush(any(Product.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ProductResponse response =
+                productService.updateProduct(productId, request);
+
+        assertNotNull(response);
+        assertEquals(productId, response.getId());
+        assertEquals("Samsung Galaxy S26", response.getName());
+        assertEquals("Updated Samsung smartphone", response.getDescription());
+        assertEquals(new BigDecimal("1199.99"), response.getPrice());
+        assertEquals(20, response.getQuantity());
+        assertEquals("Electronics", response.getCategory());
+
+        verify(productRepository).findById(productId);
+
+        verify(productRepository, never())
+                .existsByNormalizedName(anyString());
+
+        verify(productRepository).saveAndFlush(product);
     }
 
     /**
@@ -277,12 +496,9 @@ class ProductServiceImplTest {
 
         Long productId = 100L;
 
-        ProductRequest request = new ProductRequest();
-        request.setName("Samsung Galaxy S26 Ultra");
-        request.setDescription("Samsung flagship smartphone");
-        request.setPrice(new BigDecimal("1299.99"));
-        request.setQuantity(15);
-        request.setCategory("Electronics");
+        ProductRequest request = createTestProductRequest("Samsung Galaxy S26 Ultra",
+                "Updated Samsung flagship smartphone", new BigDecimal("1299.99"),
+                15, "Electronics");
 
         when(productRepository.findById(productId))
                 .thenReturn(Optional.empty());
@@ -294,6 +510,137 @@ class ProductServiceImplTest {
 
         verify(productRepository).findById(productId);
         verify(productRepository, never()).saveAndFlush(any(Product.class));
+    }
+
+    /**
+     * Verifies that a product-name unique index violation during
+     * an update is translated into DuplicateProductException.
+     */
+    @Test
+    void updateProduct_whenUniqueIndexIsViolated_throwsDuplicateProductException() {
+
+        Long productId = 2L;
+
+        Product product = createTestProduct(
+                productId,
+                "Apple iPhone 17",
+                "Apple smartphone",
+                new BigDecimal("1099.99"),
+                20,
+                "Electronics"
+        );
+
+        ProductRequest request = createTestProductRequest("Samsung Galaxy S26",
+                "Samsung smartphone", new BigDecimal("999.99"), 25,
+                "Electronics");
+
+        when(productRepository.findById(productId))
+                .thenReturn(Optional.of(product));
+
+        when(productRepository.existsByNormalizedName(request.getName()))
+                .thenReturn(false);
+
+        SQLException sqlException = new SQLException(
+                "Duplicate product name",
+                "23505"
+        );
+
+        ConstraintViolationException constraintException =
+                new ConstraintViolationException(
+                        "Unique index violation",
+                        sqlException,
+                        "ux_products_normalized_name"
+                );
+
+        DataIntegrityViolationException dataException =
+                new DataIntegrityViolationException(
+                        "Database integrity violation",
+                        constraintException
+                );
+
+        when(productRepository.saveAndFlush(any(Product.class)))
+                .thenThrow(dataException);
+
+        DuplicateProductException exception = assertThrows(
+                DuplicateProductException.class,
+                () -> productService.updateProduct(productId, request)
+        );
+
+        assertEquals(
+                "Product already exists with name: Samsung Galaxy S26",
+                exception.getMessage()
+        );
+
+        verify(productRepository).findById(productId);
+        verify(productRepository)
+                .existsByNormalizedName(request.getName());
+        verify(productRepository).saveAndFlush(any(Product.class));
+    }
+
+    /**
+     * Verifies that a database integrity violation unrelated to
+     * the product-name unique index is propagated unchanged
+     * during a product update.
+     */
+    @Test
+    void updateProduct_whenUnrelatedConstraintIsViolated_propagatesException() {
+
+        Long productId = 2L;
+
+        Product product = createTestProduct(
+                productId,
+                "Apple iPhone 17",
+                "Apple smartphone",
+                new BigDecimal("1099.99"),
+                20,
+                "Electronics"
+        );
+
+        ProductRequest request = createTestProductRequest("Samsung Galaxy S26",
+                "Samsung smartphone", new BigDecimal("999.99"), 25,
+                "Electronics");
+
+        when(productRepository.findById(productId))
+                .thenReturn(Optional.of(product));
+
+        when(productRepository.existsByNormalizedName(request.getName()))
+                .thenReturn(false);
+
+        SQLException sqlException = new SQLException(
+                "Other database constraint violation",
+                "23502"
+        );
+
+        ConstraintViolationException constraintException =
+                new ConstraintViolationException(
+                        "Not-null constraint violation",
+                        sqlException,
+                        "products_category_not_null"
+                );
+
+        DataIntegrityViolationException dataException =
+                new DataIntegrityViolationException(
+                        "Database integrity violation",
+                        constraintException
+                );
+
+        when(productRepository.saveAndFlush(any(Product.class)))
+                .thenThrow(dataException);
+
+        DataIntegrityViolationException exception = assertThrows(
+                DataIntegrityViolationException.class,
+                () -> productService.updateProduct(productId, request)
+        );
+
+        assertSame(dataException, exception);
+
+        verify(productRepository).findById(productId);
+
+        verify(productRepository)
+                .existsByNormalizedName(request.getName());
+
+        verify(productRepository)
+                .saveAndFlush(any(Product.class));
     }
 
     /**
@@ -427,7 +774,6 @@ class ProductServiceImplTest {
     @Test
     void getProductsByCategory_whenMatchingProductsExist_returnsPagedProductResponses() {
 
-        // Arrange
         String category = "Electronics";
         Pageable pageable = PageRequest.of(0, 10);
 
@@ -541,5 +887,30 @@ class ProductServiceImplTest {
         product.setCategory(category);
 
         return product;
+    }
+
+    /**
+     * Creates a test product request with the specified field values.
+     *
+     * @param name        the product name
+     * @param description the product description
+     * @param price       the unit price of the product
+     * @param quantity    the available inventory quantity
+     * @param category    the product category
+     * @return a product request populated with the specified test values
+     */
+    private static ProductRequest createTestProductRequest(
+            String name,
+            String description,
+            BigDecimal price,
+            int quantity,
+            String category) {
+        ProductRequest request = new ProductRequest();
+        request.setName(name);
+        request.setDescription(description);
+        request.setPrice(price);
+        request.setQuantity(quantity);
+        request.setCategory(category);
+        return request;
     }
 }

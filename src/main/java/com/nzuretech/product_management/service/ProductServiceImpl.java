@@ -3,9 +3,12 @@ package com.nzuretech.product_management.service;
 import com.nzuretech.product_management.dto.ProductRequest;
 import com.nzuretech.product_management.dto.ProductResponse;
 import com.nzuretech.product_management.entity.Product;
+import com.nzuretech.product_management.exception.DuplicateProductException;
 import com.nzuretech.product_management.exception.ProductNotFoundException;
 import com.nzuretech.product_management.repository.ProductRepository;
 
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -37,15 +40,33 @@ public class ProductServiceImpl implements ProductService {
         this.productRepository = productRepository;
     }
 
+
     @Override
     public ProductResponse createProduct(ProductRequest request) {
+
+        if (productRepository.existsByNormalizedName(request.getName())) {
+            throw new DuplicateProductException(
+                    "Product already exists with name: " + request.getName());
+        }
+
         Product product = new Product();
         mapRequestToEntity(request, product);
 
-        Product savedProduct = productRepository.save(product);
+        try {
+            Product savedProduct = productRepository.saveAndFlush(product);
+            return mapEntityToResponse(savedProduct);
 
-        return mapEntityToResponse(savedProduct);
+        } catch (DataIntegrityViolationException ex) {
+
+            if (isDuplicateProductNameViolation(ex)) {
+                throw new DuplicateProductException(
+                        "Product already exists with name: " + request.getName());
+            }
+
+            throw ex;
+        }
     }
+
 
     @Override
     @Transactional(readOnly = true)
@@ -72,12 +93,28 @@ public class ProductServiceImpl implements ProductService {
                         new ProductNotFoundException(
                                 "Product not found with ID: " + id));
 
+        if (!product.getName().trim().equalsIgnoreCase(request.getName().trim())
+                && productRepository.existsByNormalizedName(request.getName())) {
+
+            throw new DuplicateProductException(
+                    "Product already exists with name: " + request.getName());
+        }
+
         mapRequestToEntity(request, product);
 
-        // Flush changes to trigger the @PreUpdate lifecycle callback.
-        productRepository.saveAndFlush(product);
+        try {
+            productRepository.saveAndFlush(product);
+            return mapEntityToResponse(product);
 
-        return mapEntityToResponse(product);
+        } catch (DataIntegrityViolationException ex) {
+
+            if (isDuplicateProductNameViolation(ex)) {
+                throw new DuplicateProductException(
+                        "Product already exists with name: " + request.getName());
+            }
+
+            throw ex;
+        }
     }
 
     @Override
@@ -136,4 +173,29 @@ public class ProductServiceImpl implements ProductService {
                 product.getUpdatedAt()
         );
     }
+
+    /**
+     * Checks whether a database integrity error was caused by
+     * the product-name unique index.
+     *
+     * @param exception the database integrity exception
+     * @return true if the product-name unique index was violated
+     */
+    private boolean isDuplicateProductNameViolation(
+            DataIntegrityViolationException exception) {
+
+        Throwable cause = exception;
+
+        while (cause != null) {
+            if (cause instanceof ConstraintViolationException constraintException) {
+                return "ux_products_normalized_name"
+                        .equalsIgnoreCase(constraintException.getConstraintName());
+            }
+
+            cause = cause.getCause();
+        }
+
+        return false;
+    }
+
 }

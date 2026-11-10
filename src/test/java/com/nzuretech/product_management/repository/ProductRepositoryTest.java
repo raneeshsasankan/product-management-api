@@ -2,11 +2,13 @@ package com.nzuretech.product_management.repository;
 
 import com.nzuretech.product_management.entity.Product;
 import jakarta.persistence.EntityManager;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -32,7 +34,10 @@ import static org.junit.jupiter.api.Assertions.*;
 @DataJpaTest
 @Import(ProductRepositoryTest.ContainerConfig.class)
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@TestPropertySource(properties = "spring.jpa.hibernate.ddl-auto=create-drop")
+@TestPropertySource(properties = {
+        "spring.jpa.hibernate.ddl-auto=validate",
+        "spring.flyway.enabled=true"
+})
 class ProductRepositoryTest {
 
     @Autowired
@@ -74,13 +79,60 @@ class ProductRepositoryTest {
     }
 
     /**
+     * Verifies that the database unique index rejects product names
+     * that differ only in capitalization or surrounding whitespace.
+     */
+    @Test
+    void saveProduct_whenNormalizedNameAlreadyExists_throwsException() {
+
+        Product firstProduct = new Product();
+        firstProduct.setName("Samsung Galaxy S26");
+        firstProduct.setDescription("Samsung smartphone");
+        firstProduct.setPrice(new BigDecimal("999.99"));
+        firstProduct.setQuantity(25);
+        firstProduct.setCategory("Electronics");
+
+        productRepository.saveAndFlush(firstProduct);
+
+        Product duplicateProduct = new Product();
+        duplicateProduct.setName(" samsung galaxy s26 ");
+        duplicateProduct.setDescription("Duplicate Samsung smartphone");
+        duplicateProduct.setPrice(new BigDecimal("999.99"));
+        duplicateProduct.setQuantity(10);
+        duplicateProduct.setCategory("Electronics");
+
+
+        DataIntegrityViolationException exception = assertThrows(
+                DataIntegrityViolationException.class,
+                () -> productRepository.saveAndFlush(duplicateProduct)
+        );
+
+        Throwable cause = exception;
+        ConstraintViolationException constraintViolation = null;
+
+        while (cause != null) {
+            if (cause instanceof ConstraintViolationException violation) {
+                constraintViolation = violation;
+                break;
+            }
+            cause = cause.getCause();
+        }
+
+        assertNotNull(constraintViolation);
+        assertEquals(
+                "ux_products_normalized_name",
+                constraintViolation.getConstraintName()
+        );
+
+    }
+
+    /**
      * Verifies that updating a product preserves its creation timestamp
      * and updates its modification timestamp.
      */
     @Test
     void update_whenProductExists_updatesOnlyModifiedTimestamp() {
 
-        // Arrange
         Product product = createTestProduct("Samsung Galaxy S25",
                 "Samsung smartphone", new BigDecimal("999.99"),
                 10, "Electronics");
@@ -123,7 +175,6 @@ class ProductRepositoryTest {
     @Test
     void findByNameContainingIgnoreCase_whenMatchingProductsExist_returnsProducts() {
 
-        // Arrange
         Product product1 = createTestProduct("Samsung Galaxy S26 Ultra",
                 "Samsung smartphone", new BigDecimal("1299.99"),
                 15, "Electronics");
@@ -221,6 +272,61 @@ class ProductRepositoryTest {
 
         assertEquals("Apple iPhone 17",
                 result.getContent().get(1).getName());
+    }
+
+    /**
+     * Verifies that normalized product-name existence checking
+     * returns true when a matching product exists with different casing.
+     */
+    @Test
+    void existsByNormalizedName_whenNameExistsWithDifferentCase_returnsTrue() {
+
+        Product product = createTestProduct("Samsung Galaxy S26", "Samsung smartphone",
+                new BigDecimal("999.99"), 25, "Electronics");
+
+        productRepository.saveAndFlush(product);
+
+        boolean exists = productRepository
+                .existsByNormalizedName("samsung galaxy s26");
+
+        assertTrue(exists);
+    }
+
+    /**
+     * Verifies that normalized product-name existence checking returns false
+     * when no persisted product matches the specified name.
+     */
+    @Test
+    void existsByNormalizedName_whenNameDoesNotExist_returnsFalse() {
+
+        Product product = createTestProduct("Samsung Galaxy S26", "Samsung smartphone",
+                new BigDecimal("999.99"), 25, "Electronics");
+
+        productRepository.saveAndFlush(product);
+
+        boolean exists = productRepository
+                .existsByNormalizedName("Apple iPhone 17");
+
+        assertFalse(exists);
+    }
+
+    /**
+     * Verifies that normalized product-name existence checking
+     * ignores leading and trailing whitespace.
+     */
+    @Test
+    void existsByNormalizedName_whenNameContainsWhitespace_returnsTrue() {
+
+        Product product = createTestProduct("Samsung Galaxy S26", "Samsung smartphone",
+                new BigDecimal("999.99"), 25, "Electronics");
+
+        productRepository.saveAndFlush(product);
+
+        boolean exists = productRepository.existsByNormalizedName(
+                " Samsung Galaxy S26 "
+        );
+
+        assertTrue(exists);
     }
 
     /**

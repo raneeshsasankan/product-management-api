@@ -3,6 +3,7 @@ package com.nzuretech.product_management.service;
 import com.nzuretech.product_management.dto.ProductRequest;
 import com.nzuretech.product_management.dto.ProductResponse;
 import com.nzuretech.product_management.exception.ProductNotFoundException;
+import com.nzuretech.product_management.exception.DuplicateProductException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -21,6 +22,7 @@ public interface ProductService {
      *
      * @param request the product details to create
      * @return the created product
+     * @throws DuplicateProductException if the product name already exists
      */
     ProductResponse createProduct(ProductRequest request);
 
@@ -48,6 +50,8 @@ public interface ProductService {
      * @param request the updated product details
      * @return the updated product
      * @throws ProductNotFoundException if the product does not exist
+     * @throws DuplicateProductException if another product already uses
+     *         the requested name
      */
     ProductResponse updateProduct(Long id, ProductRequest request);
 
