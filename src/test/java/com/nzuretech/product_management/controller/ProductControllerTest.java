@@ -253,6 +253,34 @@ class ProductControllerTest {
     }
 
     /**
+     * Verifies that unexpected service exceptions result in
+     * HTTP 500 without exposing internal error details.
+     */
+    @Test
+    void getProductById_whenUnexpectedExceptionOccurs_returnsInternalServerError()
+            throws Exception {
+
+        Long productId = 1L;
+
+        when(productService.getProductById(productId))
+                .thenThrow(new RuntimeException(
+                        "Sensitive internal database error"
+                ));
+
+        mockMvc.perform(get("/api/products/{id}", productId))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.status").value(500))
+                .andExpect(jsonPath("$.error")
+                        .value("Internal Server Error"))
+                .andExpect(jsonPath("$.message")
+                        .value("An unexpected error occurred."))
+                .andExpect(jsonPath("$.timestamp").exists());
+
+        verify(productService).getProductById(productId);
+    }
+
+
+    /**
      * Verifies that retrieving products with pagination and sorting
      * returns HTTP 200 and passes the correct Pageable to the service.
      *
