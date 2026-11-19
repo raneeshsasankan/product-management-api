@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.data.domain.*;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
@@ -191,6 +192,30 @@ class ProductControllerTest {
                 .andExpect(jsonPath("$.timestamp").exists());
 
         verify(productService).createProduct(any(ProductRequest.class));
+    }
+
+    /**
+     * Verifies that malformed JSON request bodies return
+     * HTTP 400 Bad Request instead of an internal server error.
+     */
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void createProduct_whenJsonIsMalformed_returnsBadRequest()
+            throws Exception {
+
+        String malformedJson = "{name: \"Samsung Galaxy S26\"}";
+
+        mockMvc.perform(post("/api/products")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(malformedJson))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.message")
+                        .value("Malformed JSON request body."))
+                .andExpect(jsonPath("$.timestamp").exists());
+
+        verifyNoInteractions(productService);
     }
 
     /**
