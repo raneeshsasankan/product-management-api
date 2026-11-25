@@ -1,0 +1,14 @@
+.git
+.github
+.idea
+target
+*.iml
+
+.env
+.env.*
+**/application-local.properties
+*.dump
+*.bak
+*.log
+
+README.md
